@@ -1,7 +1,8 @@
 use cid::Cid;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sled::IVec;
+use std::ops::Add;
 
 fn serialize_cid<S: Serializer>(cid: &Cid, s: S) -> Result<S::Ok, S::Error> {
     let cid_bytes = cid.to_bytes();
@@ -10,8 +11,8 @@ fn serialize_cid<S: Serializer>(cid: &Cid, s: S) -> Result<S::Ok, S::Error> {
 
 // fn<'de, D>(D) -> Result<T, D::Error> where D: Deserializer<'de>
 fn deserialize_cid<'de, D>(deserializer: D) -> Result<Cid, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     let cid_bytes = <&[u8]>::deserialize(deserializer)?;
     Cid::read_bytes(cid_bytes).map_err(|e| Error::custom(e.to_string()))
@@ -38,6 +39,13 @@ impl From<IVec> for DealID {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct BlockNum(pub u64);
 
+impl Add for BlockNum {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        BlockNum(self.0 + other.0)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct OnChainDealInfo {
     pub deal_start_block: BlockNum,
@@ -49,8 +57,6 @@ pub struct OnChainDealInfo {
 }
 
 pub struct Proof {
-    // TODO: may not need block hash, probably will just get that locally on the verifier.
     pub block_number: BlockNum,
     pub bao_proof_data: Vec<u8>,
 }
-
