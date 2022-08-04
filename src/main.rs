@@ -1,8 +1,14 @@
 #[macro_use]
 extern crate lazy_static;
 
-mod deal_tracker;
+mod types;
+mod deal_tracker_db;
 mod proof_gen;
+mod talk_to_vitalik;
+mod talk_to_ipfs;
+
+// TODO: real error handling... :}
+// TODO: separation of async and non async functions. PURITY OF CODE. uwu
 
 // want to be able to accept a file from estuary, stick it in ipfs, keep it in a database with proof info, submit proofs regularly, and close out of deals.
 #[tokio::main]
