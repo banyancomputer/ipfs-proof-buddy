@@ -1,5 +1,8 @@
-mod proof_gen;
+#[macro_use]
+extern crate lazy_static;
+
 mod deal_tracker;
+mod proof_gen;
 
 // want to be able to accept a file from estuary, stick it in ipfs, keep it in a database with proof info, submit proofs regularly, and close out of deals.
 #[tokio::main]

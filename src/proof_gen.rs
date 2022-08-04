@@ -1,13 +1,13 @@
-use std::fs::File;
-use std::io::Read;
 use anyhow::{anyhow, Result};
 use bao::encode::SliceExtractor;
+use cid::Cid;
+use ethers::abi::ethereum_types::BigEndianHash;
 use ethers::{
     core::types::{BlockNumber, H256, U256},
     providers::{Http, Middleware, Provider},
 };
-use cid::Cid;
-use ethers::abi::ethereum_types::BigEndianHash;
+use std::fs::File;
+use std::io::Read;
 
 // 1024 bytes per bao chunk
 const CHUNK_SIZE: u64 = 1024;
@@ -16,7 +16,7 @@ struct IPFSFileReader {
     cid: Cid,
     size: u64,
     source: File,
-    obao: File
+    obao: File,
 }
 
 struct Proof {
@@ -53,8 +53,18 @@ async fn gen_proof(block_number: BlockNumber, file_to_prove: IPFSFileReader) -> 
     };
 
     let mut bao_proof_data = vec![];
-    let _ = SliceExtractor::new_outboard(file_to_prove.source, file_to_prove.obao, chunk_offset, chunk_size).read_to_end(&mut bao_proof_data)?;
+    let _ = SliceExtractor::new_outboard(
+        file_to_prove.source,
+        file_to_prove.obao,
+        chunk_offset,
+        chunk_size,
+    )
+    .read_to_end(&mut bao_proof_data)?;
 
     // TODO: should we check the proof locally at all...?
-    Ok(Proof { block_number, block_hash, bao_proof_data })
+    Ok(Proof {
+        block_number,
+        block_hash,
+        bao_proof_data,
+    })
 }
