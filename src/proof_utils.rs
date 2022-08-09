@@ -1,8 +1,7 @@
-use crate::talk_to_ipfs::get_handles_for_file_and_obao;
-use crate::talk_to_vitalik;
 use crate::types::*;
 use anyhow::Result;
 use bao::encode::SliceExtractor;
+use cid::Cid;
 use ethers::abi::ethereum_types::BigEndianHash;
 use ethers::prelude::H256;
 use std::io::{Read, Seek};
@@ -26,7 +25,7 @@ pub async fn compute_blake3_digest<R: Read>(mut reader: R) -> Result<[u8; 32]> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(hasher.finalize().into_bytes())
+    Ok(*hasher.finalize().as_bytes())
 }
 
 /// returns tuple (chunk_offset, chunk_size) for the Nth bao hash that you need to grab :)
@@ -39,6 +38,11 @@ fn compute_random_block_choice_from_hash(block_hash: H256, file_length: u64) -> 
         CHUNK_SIZE
     };
     (chunk_offset, chunk_size)
+}
+
+/// returns the cid where the obao is stored, as well as the root hash of the obao.
+pub async fn gen_obao<R: Read + Seek>(_reader: R) -> Result<(Cid, [u8; 32])> {
+    unimplemented!("need to wire things up to ipfs first");
 }
 
 pub async fn gen_proof<R: Read + Seek>(

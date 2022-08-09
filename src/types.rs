@@ -5,13 +5,13 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sled::IVec;
 use std::ops::Add;
 
-fn serialize_cid<S: Serializer>(cid: &Cid, s: S) -> Result<S::Ok, S::Error> {
+pub fn serialize_cid<S: Serializer>(cid: &Cid, s: S) -> Result<S::Ok, S::Error> {
     let cid_bytes = cid.to_bytes();
     s.serialize_bytes(&cid_bytes)
 }
 
 // fn<'de, D>(D) -> Result<T, D::Error> where D: Deserializer<'de>
-fn deserialize_cid<'de, D>(deserializer: D) -> Result<Cid, D::Error>
+pub fn deserialize_cid<'de, D>(deserializer: D) -> Result<Cid, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -22,6 +22,7 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct DealID(pub u64);
 
+#[allow(clippy::from_over_into)]
 impl Into<IVec> for DealID {
     fn into(self) -> IVec {
         IVec::from(&self.0.to_le_bytes())
@@ -60,12 +61,21 @@ pub struct OnChainDealInfo {
     pub deal_length_in_blocks: BlockNum,
     pub proof_frequency_in_blocks: BlockNum,
     pub price: TokenAmount,
-    pub collateral: Amount,
+    pub collateral: TokenAmount,
     pub erc20_token_denomination: Token,
     #[serde(serialize_with = "serialize_cid", deserialize_with = "deserialize_cid")]
     pub ipfs_file_cid: Cid,
     pub file_size: u64,
     pub blake3_file_checksum: [u8; 32],
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DealParams {
+    pub on_chain_deal_info: OnChainDealInfo,
+    #[serde(serialize_with = "serialize_cid", deserialize_with = "deserialize_cid")]
+    pub obao_cid: Cid,
+    pub next_proof_window_start_block_num: BlockNum,
+    pub last_proof_submission_block_num: BlockNum,
 }
 
 pub struct Proof {

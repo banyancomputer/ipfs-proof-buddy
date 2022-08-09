@@ -29,7 +29,7 @@ pub async fn post_proof(_deal_id: &DealID, _proof: Proof) -> Result<()> {
 }
 
 // TODO perhaps this is not the correct place for this code to go...
-pub async fn check_incoming_deal_params(deal_id: DealID) -> Result<()> {
+pub async fn _check_incoming_deal_params(deal_id: DealID) -> Result<()> {
     let on_chain_deal_info = get_on_chain_deal_info(deal_id).await?;
     if on_chain_deal_info.deal_start_block + on_chain_deal_info.deal_length_in_blocks
         > get_latest_block_num().await?
