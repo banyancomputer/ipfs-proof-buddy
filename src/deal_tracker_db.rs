@@ -1,7 +1,7 @@
 // DataBase? more like DaBaby! https://www.youtube.com/watch?v=mxFstYSbBmc
-use crate::proof_gen::gen_proof;
+use crate::proof_utils::gen_proof;
 use crate::talk_to_ipfs::do_we_have_this_cid_locally;
-use crate::talk_to_vitalik;
+use crate::{talk_to_ipfs, talk_to_vitalik};
 use crate::types::*;
 use anyhow::{anyhow, Result};
 use cid::Cid;
@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 const SLED_FILE: &str = "deal_tracker.sled";
 const DEAL_DB_IDENT: &str = "deal_db";
 const SCHEDULE_DB_IDENT: &str = "schedule_db";
-const CURRENT_THROUGH_BLOCK_N_KEY: &str = "current_through_block_n";
 
 #[derive(Serialize, Deserialize)]
 struct DealParams {
     on_chain_deal_info: OnChainDealInfo,
+    obao_cid: Cid,
     next_proof_window_start_block_num: BlockNum,
     last_proof_submission_block_num: BlockNum,
 }
@@ -57,41 +57,19 @@ impl ProofScheduleDb {
         Ok(())
     }
 
-    // relate the on-chain ID to the DealParams struct.
-    pub(crate) async fn add_a_deal_to_db(&self, deal_id: DealID, cid: Cid) -> Result<()> {
-        // TODO: you need to write the code that transfers this CID to our IPFS node.
-        if !do_we_have_this_cid_locally(cid).await? {
-            return Err(anyhow!("cid not found locally"));
-        }
-        // TODO: check that we've accepted it on-chain, check the parameters?
-        talk_to_vitalik::check_incoming_deal_params(deal_id).await?;
-
-        // add to deals database with correct information.
-        let on_chain_deal_info = talk_to_vitalik::get_on_chain_deal_info(deal_id).await?;
-        let deal_params = DealParams {
-            on_chain_deal_info,
-            // TODO: figure out what if we only hear about the deal really late?
-            next_proof_window_start_block_num: on_chain_deal_info.deal_start_block,
-            last_proof_submission_block_num: BlockNum(0),
-        };
-        self.deal_tree.insert(&deal_id, &deal_params)?;
+    /// relate the on-chain ID to the DealParams struct.
+    /// BEFORE YOU CALL THIS!: have accepted the deal on chain, have received and validated the file, and have generated and stored the obao.
+    pub(crate) async fn add_a_deal_to_db(&self, deal_params: DealParams) -> Result<()> {
+        // TODO: maybe we ought to add some checks for: having the obao, having the file, having the deal accepted on chain, timing, etc.
+        self.deal_tree.insert(&deal_params.on_chain_deal_info.deal_id, &deal_params)?;
 
         // put into scheduler!
-        self.schedule(on_chain_deal_info.deal_start_block, deal_id)
+        // TODO: this is wrong!!!
+        self.schedule(deal_params.on_chain_deal_info.deal_start_block, deal_id)
     }
 
     // TODO: make DB stuff atomic i think
     pub(crate) async fn wake_up(&self) -> Result<()> {
-        // what's the last block that we proved our deals up through?
-        let current_through_block_n = match self.db.get(CURRENT_THROUGH_BLOCK_N_KEY)? {
-            Some(current_through_block_n_vec) => {
-                let mut current_through_block_n_bytes = [0u8; 8];
-                current_through_block_n_bytes.copy_from_slice(&current_through_block_n_vec);
-                BlockNum(u64::from_le_bytes(current_through_block_n_bytes))
-            }
-            None => BlockNum(0),
-        };
-
         // TODO: lazy static this provider
         // construct an ethers provider
         let provider = Provider::<Http>::try_from("https://mainnet.infura.io/v3/idk hee hee")?;
@@ -101,9 +79,10 @@ impl ProofScheduleDb {
         // TODO: do the proofs, submit them, and move them around in the scheduler as needed.
         for block_and_deals in self
             .schedule_tree
-            .range(current_through_block_n..current_block_n)
+            .range(0..current_block_n)
         {
             let (block, deal_ids) = block_and_deals?;
+            let block_hash = talk_to_vitalik::get_block_hash(&block).await?;
             for deal_id in deal_ids.iter() {
                 // TODO use sled compare_and_swap to atomically update the deal_params.
                 let deal_params = self
@@ -112,8 +91,10 @@ impl ProofScheduleDb {
                     .ok_or_else(|| anyhow!("no deal params found for deal id {:?}", deal_id))?;
                 let proof_to_post = gen_proof(
                     block,
-                    deal_params.on_chain_deal_info.ipfs_file_cid,
-                    deal_params.on_chain_deal_info.ipfs_file_size,
+                    block_hash,
+                    talk_to_ipfs::get_handle_for_cid(deal_params.on_chain_deal_info.ipfs_file_cid).await?,
+                    talk_to_ipfs::get_handle_for_cid(deal_params.obao_cid).await?,
+                    deal_params.on_chain_deal_info.file_size,
                 )
                 .await?;
                 talk_to_vitalik::post_proof(deal_id, proof_to_post).await?;
@@ -121,11 +102,6 @@ impl ProofScheduleDb {
             self.schedule_tree.remove(&block)?;
         }
 
-        // update the last block we proved up to.
-        let _ = self.db.insert(
-            CURRENT_THROUGH_BLOCK_N_KEY,
-            &(current_block_n.0.to_le_bytes()),
-        )?;
         Ok(())
     }
 }

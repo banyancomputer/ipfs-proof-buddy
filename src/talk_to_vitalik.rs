@@ -41,6 +41,6 @@ pub async fn check_incoming_deal_params(deal_id: DealID) -> Result<()> {
     unimplemented!("check the rest of the things you need to check for incoming deal parameters!")
 }
 
-pub async fn accept_deal_on_chain() -> Result<DealID> {
+pub async fn accept_deal_on_chain() -> Result<OnChainDealInfo> {
     unimplemented!("https://open.spotify.com/track/0oxYB9GoOIDrdzniNdKC44?si=71f88a0b1afa47a4")
 }

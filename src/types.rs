@@ -1,4 +1,5 @@
 use cid::Cid;
+use ethers::prelude::Address;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sled::IVec;
@@ -46,14 +47,25 @@ impl Add for BlockNum {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+pub struct TokenAmount(pub u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Token(pub Address);
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct OnChainDealInfo {
+    pub deal_id: DealID,
     pub deal_start_block: BlockNum,
     pub deal_length_in_blocks: BlockNum,
     pub proof_frequency_in_blocks: BlockNum,
+    pub price: TokenAmount,
+    pub collateral: Amount,
+    pub erc20_token_denomination: Token,
     #[serde(serialize_with = "serialize_cid", deserialize_with = "deserialize_cid")]
     pub ipfs_file_cid: Cid,
-    pub ipfs_file_size: u64,
+    pub file_size: u64,
+    pub blake3_file_checksum: [u8; 32],
 }
 
 pub struct Proof {
