@@ -19,6 +19,19 @@ where
     Cid::read_bytes(cid_bytes).map_err(|e| Error::custom(e.to_string()))
 }
 
+pub fn serialize_hash<S: Serializer>(hash: &bao::Hash, s: S) -> Result<S::Ok, S::Error> {
+    let hash_bytes = hash.as_bytes();
+    s.serialize_bytes(hash_bytes)
+}
+
+pub fn deserialize_hash<'de, D>(deserializer: D) -> Result<bao::Hash, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let hash_bytes = <[u8; 32]>::deserialize(deserializer)?;
+    Ok(bao::Hash::from(hash_bytes))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct DealID(pub u64);
 
@@ -66,7 +79,11 @@ pub struct OnChainDealInfo {
     #[serde(serialize_with = "serialize_cid", deserialize_with = "deserialize_cid")]
     pub ipfs_file_cid: Cid,
     pub file_size: u64,
-    pub blake3_file_checksum: [u8; 32],
+    #[serde(
+        serialize_with = "serialize_hash",
+        deserialize_with = "deserialize_hash"
+    )]
+    pub blake3_file_checksum: bao::Hash,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -15,19 +15,6 @@ fn get_num_chunks(size: u64) -> u64 {
     (size as f32 / CHUNK_SIZE as f32).ceil() as u64
 }
 
-pub async fn compute_blake3_digest<R: Read>(mut reader: R) -> Result<[u8; 32]> {
-    let mut buf = [0u8; CHUNK_SIZE as usize];
-    let mut hasher = blake3::Hasher::new();
-    loop {
-        let n = reader.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Ok(*hasher.finalize().as_bytes())
-}
-
 /// returns tuple (chunk_offset, chunk_size) for the Nth bao hash that you need to grab :)
 fn compute_random_block_choice_from_hash(block_hash: H256, file_length: u64) -> (u64, u64) {
     let chunk_number = (block_hash.into_uint() % get_num_chunks(file_length)).as_u64();

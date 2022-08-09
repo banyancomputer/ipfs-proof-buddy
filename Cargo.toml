@@ -19,4 +19,3 @@ typed-sled = "0.2"
 rocket = {version = "0.5.0-rc.2", features = ["json"]}
 config = "0.13"
 log = "0.4"
-blake3 = "1.3"

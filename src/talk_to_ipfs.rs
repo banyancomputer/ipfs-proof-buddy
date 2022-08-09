@@ -19,8 +19,7 @@ pub async fn download_file_from_ipfs(_cid: Cid, _length: u64) -> Result<()> {
 /// returns Ok(Cid) of the obao if things succeeded, Error if not
 pub async fn validate_file_gen_obao(cid: Cid, blake3_hash: bao::Hash) -> Result<Cid> {
     let handle = get_handle_for_cid(cid).await?;
-    let (obao_cid, obao_digest) =
-        proof_utils::gen_obao::<BufReader<File>>(handle).await?;
+    let (obao_cid, obao_digest) = proof_utils::gen_obao::<BufReader<File>>(handle).await?;
     if obao_digest != blake3_hash {
         Err(anyhow::anyhow!("obao does not match blake3 hash"))?
     };
