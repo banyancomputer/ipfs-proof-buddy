@@ -1,10 +1,11 @@
 use crate::types::*;
 use anyhow::Result;
+use bao::encode::Encoder;
 use bao::encode::SliceExtractor;
-use cid::Cid;
 use ethers::abi::ethereum_types::BigEndianHash;
 use ethers::prelude::H256;
-use std::io::{Read, Seek};
+use std::fs::File;
+use std::io::{Read, Seek, Write};
 
 // TODO move this info a config file maybe?
 /// 1024 bytes per bao chunk
@@ -27,9 +28,21 @@ fn compute_random_block_choice_from_hash(block_hash: H256, file_length: u64) -> 
     (chunk_offset, chunk_size)
 }
 
-/// returns the cid where the obao is stored, as well as the root hash of the obao.
-pub async fn gen_obao<R: Read + Seek>(_reader: R) -> Result<(Cid, bao::Hash)> {
-    unimplemented!("need to wire things up to ipfs first");
+/// returns the root hash of the obao as well as the file where it's temporarily stored
+pub async fn gen_obao<R: Read>(mut reader: R) -> Result<(bao::Hash, File)> {
+    // make a temp file to hold the obao
+    let obao_file = tempfile::tempfile()?;
+    let mut encoder = Encoder::new_outboard(obao_file);
+    loop {
+        let mut buf = [0u8; CHUNK_SIZE as usize];
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        encoder.write_all(&buf[..n])?;
+    }
+    let hash = encoder.finalize()?;
+    Ok((hash, encoder.into_inner()))
 }
 
 pub async fn gen_proof<R: Read + Seek>(
