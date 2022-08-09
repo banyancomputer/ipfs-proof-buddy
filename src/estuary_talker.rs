@@ -24,7 +24,7 @@ pub async fn estuary_call_handler(deal_ids: Vec<DealID>) -> Result<Vec<DealID>> 
             continue;
         }
         talk_to_ipfs::download_file_from_ipfs(deal_info.ipfs_file_cid, deal_info.file_size).await?;
-        let obao_cid = talk_to_ipfs::validate_file_and_gen_obao(
+        let obao_cid = talk_to_ipfs::validate_file_gen_obao(
             deal_info.ipfs_file_cid,
             deal_info.blake3_file_checksum,
         )

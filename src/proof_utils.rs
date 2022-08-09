@@ -41,7 +41,7 @@ fn compute_random_block_choice_from_hash(block_hash: H256, file_length: u64) -> 
 }
 
 /// returns the cid where the obao is stored, as well as the root hash of the obao.
-pub async fn gen_obao<R: Read + Seek>(_reader: R) -> Result<(Cid, [u8; 32])> {
+pub async fn gen_obao<R: Read + Seek>(_reader: R) -> Result<(Cid, bao::Hash)> {
     unimplemented!("need to wire things up to ipfs first");
 }
 

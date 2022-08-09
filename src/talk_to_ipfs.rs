@@ -16,16 +16,10 @@ pub async fn download_file_from_ipfs(_cid: Cid, _length: u64) -> Result<()> {
     unimplemented!("https://open.spotify.com/track/0oxYB9GoOIDrdzniNdKC44?si=71f88a0b1afa47a4")
 }
 
-// TODO: only read the file once...?
 /// returns Ok(Cid) of the obao if things succeeded, Error if not
-pub async fn validate_file_and_gen_obao(cid: Cid, blake3_hash: [u8; 32]) -> Result<Cid> {
+pub async fn validate_file_gen_obao(cid: Cid, blake3_hash: bao::Hash) -> Result<Cid> {
     let handle = get_handle_for_cid(cid).await?;
-    let digest = proof_utils::compute_blake3_digest(handle).await?;
-    if digest != blake3_hash {
-        Err(anyhow::anyhow!("file does not match blake3 hash"))?
-    };
-    let handle = get_handle_for_cid(cid).await?;
-    let (obao_cid, obao_digest): (Cid, [u8; 32]) =
+    let (obao_cid, obao_digest) =
         proof_utils::gen_obao::<BufReader<File>>(handle).await?;
     if obao_digest != blake3_hash {
         Err(anyhow::anyhow!("obao does not match blake3 hash"))?
