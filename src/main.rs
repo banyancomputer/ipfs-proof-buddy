@@ -13,8 +13,7 @@ mod webserver;
 use config::{Config, File, FileFormat};
 use log::{error, info};
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::time::{self, Duration, timeout};
+use tokio::time::{self, Duration};
 
 // TODO: separation of async and non async functions. PURITY OF CODE. uwu
 
@@ -43,8 +42,11 @@ async fn main() {
     // initialize ethereum api provider
     let eth_api_url = config.get_string(ETH_API_ADDR).unwrap();
     let eth_api_timeout = config.get_int(ETH_API_TIMEOUT).unwrap();
-    let eth_provider = match talk_to_vitalik::VitalikProvider::new(eth_api_url.clone(), eth_api_timeout) {
-        Ok(provider) => Arc::new(Mutex::new(provider)),
+    let eth_provider = match talk_to_vitalik::VitalikProvider::new(
+        eth_api_url.clone(),
+        eth_api_timeout.try_into().unwrap(),
+    ) {
+        Ok(provider) => Arc::new(provider),
         Err(e) => {
             error!("failed to create ethereum provider: {:?}", e);
             return;
@@ -73,11 +75,11 @@ async fn main() {
 
     loop {
         interval.tick().await;
+        let eth_provider = eth_provider.clone();
         // database wakeup
-        let eth_provider_for_db = Arc::clone(&eth_provider);
         tokio::spawn(async move {
             // TODO what do we do if it dies...? handle better.
-            deal_tracker_db::DB.wake_up(eth_provider_for_db).await.unwrap();
+            deal_tracker_db::DB.wake_up(eth_provider).await.unwrap();
         });
     }
 }

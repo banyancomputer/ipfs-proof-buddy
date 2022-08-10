@@ -1,13 +1,10 @@
 use std::sync::Arc;
-use std::time::Duration;
 // DataBase? more like DaBaby! https://www.youtube.com/watch?v=mxFstYSbBmc
 use crate::proof_utils::gen_proof;
 use crate::talk_to_ipfs;
 use crate::talk_to_vitalik::VitalikProvider;
 use crate::types::*;
 use anyhow::{anyhow, Result};
-use tokio::sync::Mutex;
-use tokio::time::timeout;
 
 // TODO: ensure this is safe if it falls over in the middle of a transaction. you've done half a job...
 const SLED_FILE: &str = "deal_tracker.sled";
@@ -65,22 +62,18 @@ impl ProofScheduleDb {
 
     // TODO: make DB stuff atomic i think
     // TODO: ensure we aren't sitting here proving things that have already expired.
-    pub(crate) async fn wake_up(&self, eth_provider: Arc<Mutex<VitalikProvider>>) -> Result<()> {
-        let current_block_n = {
-            // get the lock on the vitalikprovider
-            let provider = (*eth_provider).lock().await;
-            provider.get_latest_block_num().await
-        }?;
+    // TODO: add hella timeouts to DB tasks
+    pub(crate) async fn wake_up(&self, eth_provider: Arc<VitalikProvider>) -> Result<()> {
+        let current_block_n = eth_provider.get_latest_block_num().await?;
 
         // TODO: update the proof information in the deal_tree (last_proven and next_proof and stuff)
         for block_and_deals in self.schedule_tree.range(BlockNum(0)..current_block_n) {
             let (block, deal_ids) = block_and_deals?;
 
-            let block_hash = {
+            let block_hash =
                 // get the lock on the vitalikprovider
-                let provider = (*eth_provider).lock().await;
-                provider.get_block_hash_from_num(block).await
-            }?;
+                eth_provider.get_block_hash_from_num(block).await
+            ?;
             for deal_id in deal_ids.iter() {
                 // TODO use sled compare_and_swap to atomically update the deal_params.
                 let deal_params = self
@@ -96,16 +89,10 @@ impl ProofScheduleDb {
                     deal_params.on_chain_deal_info.file_size,
                 )
                 .await?;
-                {
-                    // get the lock on the vitalikprovider
-                    let provider = (*eth_provider).lock().await;
-                    provider.post_proof(deal_id, proof_to_post).await
-                }?;
+                eth_provider.post_proof(deal_id, proof_to_post).await?;
             }
             self.schedule_tree.remove(&block)?;
         }
-        info!("successfully finished a DB wakeup before all ")
-
         Ok(())
     }
 }
