@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 // DataBase? more like DaBaby! https://www.youtube.com/watch?v=mxFstYSbBmc
 use crate::proof_utils::gen_proof;
 use crate::talk_to_ipfs;
@@ -6,6 +7,7 @@ use crate::talk_to_vitalik::VitalikProvider;
 use crate::types::*;
 use anyhow::{anyhow, Result};
 use tokio::sync::Mutex;
+use tokio::time::timeout;
 
 // TODO: ensure this is safe if it falls over in the middle of a transaction. you've done half a job...
 const SLED_FILE: &str = "deal_tracker.sled";
@@ -102,6 +104,7 @@ impl ProofScheduleDb {
             }
             self.schedule_tree.remove(&block)?;
         }
+        info!("successfully finished a DB wakeup before all ")
 
         Ok(())
     }

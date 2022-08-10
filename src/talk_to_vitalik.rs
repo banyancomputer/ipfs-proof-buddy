@@ -1,24 +1,34 @@
+use std::future::Future;
 use crate::types::*;
 use anyhow::{anyhow, Result};
 use ethers::prelude::H256;
+use tokio::time::{timeout, Duration};
 use ethers::providers::{Http, Middleware, Provider};
 
-pub struct VitalikProvider(Provider<Http>);
+pub struct VitalikProvider{
+    provider: Provider<Http>,
+    timeout: Duration,
+}
 
 impl VitalikProvider {
-    pub fn new(url: String) -> Result<Self> {
-        Ok(Self(Provider::<Http>::try_from(url)?))
+
+    pub fn new(url: String, timeout_seconds: u64) -> Result<Self> {
+        Ok(Self{
+            provider: Provider::<Http>::try_from(url)?,
+            timeout: Duration::from_secs(timeout_seconds),
+        })
     }
+
     pub async fn get_latest_block_num(&self) -> Result<BlockNum> {
-        let block = self.0.get_block_number().await?;
+        let block = timeout(self.timeout, self.provider.get_block_number()).await??;
         Ok(BlockNum(block.as_u64()))
     }
 
     pub async fn get_block_hash_from_num(&self, block_number: BlockNum) -> Result<H256> {
-        let block = self
-            .0
-            .get_block(block_number.0)
-            .await?
+        let block = timeout(self.timeout, self
+            .provider
+            .get_block(block_number.0))
+            .await??
             .ok_or_else(|| anyhow!("block not found"))?;
         block.hash.ok_or_else(|| anyhow!("block hash not found"))
     }

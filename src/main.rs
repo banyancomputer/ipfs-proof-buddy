@@ -14,7 +14,7 @@ use config::{Config, File, FileFormat};
 use log::{error, info};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::time::{self, Duration};
+use tokio::time::{self, Duration, timeout};
 
 // TODO: separation of async and non async functions. PURITY OF CODE. uwu
 
@@ -22,7 +22,8 @@ use tokio::time::{self, Duration};
 const CONFIG_FILE: &str = "~/.ipfs_proof_buddy.toml";
 const WAKE_UP_INTERVAL: &str = "wake_up_interval";
 const ETH_API_ADDR: &str = "eth_api_addr";
-const _IPFS_API_ADDR: &str = "ipfs_api_addr";
+const ETH_API_TIMEOUT: &str = "eth_api_timeout";
+const IPFS_API_ADDR: &str = "ipfs_api_addr";
 // want to be able to accept a file from estuary, stick it in ipfs, keep it in a database with proof info, submit proofs regularly, and close out of deals.
 #[rocket::main]
 async fn main() {
@@ -31,7 +32,9 @@ async fn main() {
         .unwrap()
         .set_default(ETH_API_ADDR, "https://mainnet.infura.io/v3/YOUR_API_KEY")
         .unwrap()
-        .set_default("ipfs_api_addr", "localhost:5050")
+        .set_default(ETH_API_TIMEOUT, 5)
+        .unwrap()
+        .set_default(IPFS_API_ADDR, "localhost:5050")
         .unwrap()
         .add_source(File::new(CONFIG_FILE, FileFormat::Json))
         .build()
@@ -39,9 +42,8 @@ async fn main() {
 
     // initialize ethereum api provider
     let eth_api_url = config.get_string(ETH_API_ADDR).unwrap();
-    // TODO error my handle baby
-    // TODO figure out how to not make two eth_providers
-    let eth_provider = match talk_to_vitalik::VitalikProvider::new(eth_api_url.clone()) {
+    let eth_api_timeout = config.get_int(ETH_API_TIMEOUT).unwrap();
+    let eth_provider = match talk_to_vitalik::VitalikProvider::new(eth_api_url.clone(), eth_api_timeout) {
         Ok(provider) => Arc::new(Mutex::new(provider)),
         Err(e) => {
             error!("failed to create ethereum provider: {:?}", e);
@@ -74,9 +76,8 @@ async fn main() {
         // database wakeup
         let eth_provider_for_db = Arc::clone(&eth_provider);
         tokio::spawn(async move {
-            // TODO what do we do if it dies...?
-            // TODO what do we do if it takes fucking forever?
-            deal_tracker_db::DB.wake_up(eth_provider_for_db).await
+            // TODO what do we do if it dies...? handle better.
+            deal_tracker_db::DB.wake_up(eth_provider_for_db).await.unwrap();
         });
     }
 }
