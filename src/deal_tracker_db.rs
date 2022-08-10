@@ -1,8 +1,11 @@
+use std::sync::Arc;
 // DataBase? more like DaBaby! https://www.youtube.com/watch?v=mxFstYSbBmc
 use crate::proof_utils::gen_proof;
+use crate::talk_to_ipfs;
+use crate::talk_to_vitalik::VitalikProvider;
 use crate::types::*;
-use crate::{talk_to_ipfs, talk_to_vitalik};
 use anyhow::{anyhow, Result};
+use tokio::sync::Mutex;
 
 // TODO: ensure this is safe if it falls over in the middle of a transaction. you've done half a job...
 const SLED_FILE: &str = "deal_tracker.sled";
@@ -12,7 +15,7 @@ const SCHEDULE_DB_IDENT: &str = "schedule_db";
 pub struct ProofScheduleDb {
     /// on_chain deal id --mapped_to--> DealParams
     deal_tree: typed_sled::Tree<DealID, DealParams>,
-    /// window --mapped_to--> on_chain deal id
+    /// window --mapped_to--> on_chain deal id vec
     schedule_tree: typed_sled::Tree<BlockNum, Vec<DealID>>,
 }
 
@@ -59,13 +62,23 @@ impl ProofScheduleDb {
     }
 
     // TODO: make DB stuff atomic i think
-    pub(crate) async fn wake_up(&self) -> Result<()> {
-        let current_block_n = talk_to_vitalik::get_latest_block_num().await?;
+    // TODO: ensure we aren't sitting here proving things that have already expired.
+    pub(crate) async fn wake_up(&self, eth_provider: Arc<Mutex<VitalikProvider>>) -> Result<()> {
+        let current_block_n = {
+            // get the lock on the vitalikprovider
+            let provider = (*eth_provider).lock().await;
+            provider.get_latest_block_num().await
+        }?;
 
-        // TODO: do the proofs, submit them, and move them around in the scheduler as needed.
+        // TODO: update the proof information in the deal_tree (last_proven and next_proof and stuff)
         for block_and_deals in self.schedule_tree.range(BlockNum(0)..current_block_n) {
             let (block, deal_ids) = block_and_deals?;
-            let block_hash = talk_to_vitalik::get_block_hash_from_num(block).await?;
+
+            let block_hash = {
+                // get the lock on the vitalikprovider
+                let provider = (*eth_provider).lock().await;
+                provider.get_block_hash_from_num(block).await
+            }?;
             for deal_id in deal_ids.iter() {
                 // TODO use sled compare_and_swap to atomically update the deal_params.
                 let deal_params = self
@@ -81,7 +94,11 @@ impl ProofScheduleDb {
                     deal_params.on_chain_deal_info.file_size,
                 )
                 .await?;
-                talk_to_vitalik::post_proof(deal_id, proof_to_post).await?;
+                {
+                    // get the lock on the vitalikprovider
+                    let provider = (*eth_provider).lock().await;
+                    provider.post_proof(deal_id, proof_to_post).await
+                }?;
             }
             self.schedule_tree.remove(&block)?;
         }

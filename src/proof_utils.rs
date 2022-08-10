@@ -1,7 +1,6 @@
 use crate::types::*;
 use anyhow::Result;
-use bao::encode::Encoder;
-use bao::encode::SliceExtractor;
+use bao::encode::{Encoder, SliceExtractor};
 use ethers::abi::ethereum_types::BigEndianHash;
 use ethers::prelude::H256;
 use std::fs::File;
