@@ -32,7 +32,7 @@ where
     Ok(bao::Hash::from(hash_bytes))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct DealID(pub u64);
 
 #[allow(clippy::from_over_into)]

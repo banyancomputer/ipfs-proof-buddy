@@ -6,11 +6,9 @@ use ethers::prelude::H256;
 use std::fs::File;
 use std::io::{Read, Seek, Write};
 
-// TODO move this info a config file maybe?
 /// 1024 bytes per bao chunk
 const CHUNK_SIZE: u64 = 1024;
 
-// TODO: check this for correctness it's from copilot...
 fn get_num_chunks(size: u64) -> u64 {
     (size as f32 / CHUNK_SIZE as f32).ceil() as u64
 }
@@ -57,7 +55,6 @@ pub async fn gen_proof<R: Read + Seek>(
     let _ = SliceExtractor::new_outboard(file_handle, obao_handle, chunk_offset, chunk_size)
         .read_to_end(&mut bao_proof_data)?;
 
-    // TODO: should we check the proof locally at all...?
     Ok(Proof {
         block_number,
         bao_proof_data,

@@ -10,6 +10,7 @@ pub struct VitalikProvider {
     timeout: Duration,
 }
 
+// TODO: one day you ought to clean up the fact that you're wrapping everything in a timeout separately. there has to be a better way...
 impl VitalikProvider {
     pub fn new(url: String, timeout_seconds: u64) -> Result<Self> {
         Ok(Self {

@@ -39,6 +39,7 @@ pub async fn build_and_store_obao<T: Read>(
 pub async fn estuary_call_handler(
     deal_ids: Vec<DealID>,
     eth_provider: &VitalikProvider,
+    db_provider: &deal_tracker_db::ProofScheduleDb,
 ) -> Result<Vec<DealID>> {
     let mut accepted_deal_ids = Vec::new();
     for deal_id in deal_ids.iter() {
@@ -51,8 +52,7 @@ pub async fn estuary_call_handler(
         let file_handle = talk_to_ipfs::get_handle_for_cid(deal_info.ipfs_file_cid).await?;
         let obao_cid = build_and_store_obao(file_handle, deal_info.blake3_file_checksum).await?;
         let on_chain_deal_info = eth_provider.accept_deal_on_chain().await?;
-        deal_tracker_db::DB
-            .add_a_deal_to_db(DealParams {
+        db_provider.add_a_deal_to_db(DealParams {
                 on_chain_deal_info,
                 obao_cid,
                 next_proof_window_start_block_num: on_chain_deal_info.deal_start_block,
