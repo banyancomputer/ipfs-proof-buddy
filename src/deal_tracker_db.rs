@@ -101,7 +101,6 @@ impl ProofScheduleDb {
         .await
     }
 
-    // TODO: make DB stuff atomic i think
     // TODO: add hella timeouts to DB tasks
     // TODO: holy shit clean this up please
     pub(crate) async fn wake_up(&self, eth_provider: Arc<VitalikProvider>) -> Result<()> {
@@ -115,7 +114,6 @@ impl ProofScheduleDb {
                 .collect::<Result<Vec<(BlockNum, HashSet<DealID>)>>>()
         }?;
 
-        // TODO: update the proof information in the deal_tree (last_proven and next_proof and stuff)
         // this iterates over everything scheduled before the current block number.
         for block_and_deals in blocks_and_deals.iter() {
             let (wakeup_block, deal_ids) = block_and_deals;
