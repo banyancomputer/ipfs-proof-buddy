@@ -1,5 +1,5 @@
 use crate::talk_to_vitalik::VitalikProvider;
-use crate::types::{BlockNum, DealID, DealStatus, LocalDealInfo, OnChainDealInfo};
+use crate::types::{DealID, OnChainDealInfo};
 use crate::{deal_tracker_db, proof_utils, talk_to_ipfs};
 use anyhow::{anyhow, Result};
 use cid::Cid;
@@ -52,17 +52,7 @@ pub async fn estuary_call_handler(
         let file_handle = talk_to_ipfs::get_handle_for_cid(deal_info.ipfs_file_cid).await?;
         let obao_cid = build_and_store_obao(file_handle, deal_info.blake3_checksum).await?;
         let onchain = eth_provider.accept_deal_on_chain().await?;
-        db_provider
-            .add_a_deal_to_db(
-                LocalDealInfo {
-                    onchain,
-                    obao_cid,
-                    last_submission: BlockNum(0),
-                    status: DealStatus::Future,
-                },
-                onchain.deal_start_block,
-            )
-            .await?;
+        db_provider.add_a_deal_to_db(onchain, obao_cid).await?;
         accepted_deal_ids.push(*deal_id);
     }
     Ok(accepted_deal_ids)

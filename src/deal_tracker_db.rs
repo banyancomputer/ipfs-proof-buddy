@@ -8,8 +8,9 @@ use crate::types::*;
 use crate::window_utils::DealStatusError;
 use crate::{talk_to_ipfs, window_utils};
 use anyhow::{anyhow, Result};
-use typed_sled::TransactionalTree;
+use cid::Cid;
 use tokio::sync::RwLock;
+use typed_sled::TransactionalTree;
 
 // TODO: ensure this is safe if it falls over in the middle of a transaction. you've done half a job...
 const DEAL_DB_IDENT: &str = "deal_db";
@@ -83,26 +84,33 @@ impl ProofScheduleDb {
         Ok(())
     }
 
-    // TODO: maybe we ought to add some checks for: having the obao, having the file, having the deal accepted on chain, timing, etc.
-    // TODO: this is wrong!!! why is this wrong? what if the deal_start_block already happened? handle this logic somewhere.
     /// relate the on-chain ID to the LocalDealInfo struct.
     /// BEFORE YOU CALL THIS!: have accepted the deal on chain, have received and validated the file, and have generated and stored the obao.
+    /// this schedules the deal for the deal_start_block and sets the status to future. on the next DB wakeup, it'll get scheduled correctly
     pub(crate) async fn add_a_deal_to_db(
         &self,
-        deal_params: LocalDealInfo,
-        first_proof_block: BlockNum,
+        deal_params: OnChainDealInfo,
+        obao_cid: Cid,
     ) -> Result<()> {
+        let local_deal_info = LocalDealInfo {
+            onchain: deal_params,
+            obao_cid,
+            last_submission: BlockNum(0),
+            status: DealStatus::Future,
+        };
         self.unschedule_and_reschedule_atomic(
-            deal_params.onchain.deal_id,
+            deal_params.deal_id,
             None,
-            Some(first_proof_block),
-            Some(deal_params),
+            Some(deal_params.deal_start_block),
+            Some(local_deal_info),
         )
         .await
+        // TODO should we add a wakeup right now? idk probably not... unless its like TIME RIGHT NOW TO DO THE THING AIEEEE LAST MINUTE
     }
 
     // TODO: add hella timeouts to DB tasks
     // TODO: holy shit clean this up please
+    // TODO: what happens if we've like totally screwed up a deal beyond belief, no chance of recovery? handle that case.
     pub(crate) async fn wake_up(&self, eth_provider: Arc<VitalikProvider>) -> Result<()> {
         let current_block_n = eth_provider.get_latest_block_num().await?;
 
@@ -156,13 +164,13 @@ impl ProofScheduleDb {
                         let new_block_num = if window_utils::completed_last_proof(&deal_params) {
                             deal_params.status = CompleteAwaitingFinalization;
                             None
-                        }  else {
+                        } else {
                             Some(window_utils::get_the_next_window(&deal_params))
                         };
                         self.unschedule_and_reschedule_atomic(
                             *deal_id,
                             Some(*wakeup_block),
-                           new_block_num,
+                            new_block_num,
                             Some(deal_params),
                         )
                         .await?;
