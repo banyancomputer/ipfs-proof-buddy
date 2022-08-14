@@ -24,6 +24,8 @@ const ETH_API_TIMEOUT: &str = "eth_api_timeout";
 const IPFS_API_ADDR: &str = "ipfs_api_addr";
 const SLED_FILE_PATH: &str = "sled_file_path";
 
+// TODO one day you need to tear out anyhow, you SINNER
+
 // want to be able to accept a file from estuary, stick it in ipfs, keep it in a database with proof info, submit proofs regularly, and close out of deals.
 #[rocket::main]
 async fn main() {

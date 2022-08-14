@@ -19,7 +19,7 @@ async fn submit_deal(
     match estuary_call_handler(deal_ids, state.0.as_ref(), state.1.as_ref()).await {
         Ok(accepted_deal_ids) => Ok(Json(accepted_deal_ids)),
         Err(e) => {
-            warn!("there was an error handling the estuary call: {}", e);
+            warn!("there was an error handling the estuary call: {:?}", e);
             Err(Custom(
                 Status::InternalServerError,
                 "internal server error :) sowwy... check the logs if you're running this :3"

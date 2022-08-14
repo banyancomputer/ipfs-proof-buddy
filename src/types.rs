@@ -122,3 +122,11 @@ pub struct Proof {
     pub block_number: BlockNum,
     pub bao_proof_data: Vec<u8>,
 }
+
+/// TODO lmao this is so lame, please improve it
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum ProofBuddyError {
+    FatalPanic(String),
+    InformWebserver(String),
+    NonFatal(String),
+}
