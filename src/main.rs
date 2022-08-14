@@ -12,43 +12,58 @@ mod webserver;
 mod window_utils;
 
 use config::{Config, File, FileFormat};
+use lazy_static::lazy_static;
 use log::{error, info};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::time::{self, Duration};
 
 // TODO: don't hardcode this... set it up with clap.
-const CONFIG_FILE: &str = "~/.ipfs_proof_buddy/config.toml";
-const WAKE_UP_INTERVAL: &str = "wake_up_interval";
-const ETH_API_ADDR: &str = "eth_api_addr";
-const ETH_API_TIMEOUT: &str = "eth_api_timeout";
-const IPFS_API_ADDR: &str = "ipfs_api_addr";
-const SLED_FILE_PATH: &str = "sled_file_path";
+const CONFIG_DIR: &str = "~/.ipfs_proof_buddy";
+lazy_static! {
+    static ref CONFIG_FILE_PATH: String = format!("{}/config.toml", CONFIG_DIR);
+    static ref SLED_FILE_PATH: String = format!("{}/sled.db", CONFIG_DIR);
+}
+
+const WAKE_UP_INTERVAL_KEY: &str = "wake_up_interval";
+const ETH_API_ADDR_KEY: &str = "eth_api_addr";
+const ETH_API_TIMEOUT_KEY: &str = "eth_api_timeout";
+const IPFS_API_ADDR_KEY: &str = "ipfs_api_addr";
+const SLED_FILE_PATH_KEY: &str = "sled_file_path";
 
 // TODO one day you need to tear out anyhow, you SINNER
 
 // want to be able to accept a file from estuary, stick it in ipfs, keep it in a database with proof info, submit proofs regularly, and close out of deals.
 #[rocket::main]
 async fn main() {
-    // TODO CHECK IF CONFIG FOLDER EXISTS, IF NOT, CREATE IT.
+    if !Path::new(CONFIG_DIR).is_dir() {
+        panic!(
+            "config folder at {} does not exist- please create it and try again",
+            CONFIG_DIR
+        );
+    }
 
     let config = Config::builder()
-        .set_default(WAKE_UP_INTERVAL, 60 * 15)
+        .set_default(WAKE_UP_INTERVAL_KEY, 60 * 15)
         .unwrap()
-        .set_default(ETH_API_ADDR, "https://mainnet.infura.io/v3/YOUR_API_KEY")
+        .set_default(
+            ETH_API_ADDR_KEY,
+            "https://mainnet.infura.io/v3/YOUR_API_KEY",
+        )
         .expect("set your api key in the config file") // TODO handle this correctly lol
-        .set_default(ETH_API_TIMEOUT, 5)
+        .set_default(ETH_API_TIMEOUT_KEY, 5)
         .unwrap()
-        .set_default(IPFS_API_ADDR, "localhost:5050")
+        .set_default(IPFS_API_ADDR_KEY, "localhost:5050")
         .unwrap()
-        .set_default(SLED_FILE_PATH, "~/.ipfs_proof_buddy/sled.sled")
+        .set_default(SLED_FILE_PATH_KEY, &SLED_FILE_PATH[..])
         .unwrap()
-        .add_source(File::new(CONFIG_FILE, FileFormat::Json))
+        .add_source(File::new(&CONFIG_FILE_PATH, FileFormat::Json))
         .build()
         .unwrap();
 
     // initialize ethereum api provider
-    let eth_api_url = config.get_string(ETH_API_ADDR).unwrap();
-    let eth_api_timeout = config.get_int(ETH_API_TIMEOUT).unwrap();
+    let eth_api_url = config.get_string(ETH_API_ADDR_KEY).unwrap();
+    let eth_api_timeout = config.get_int(ETH_API_TIMEOUT_KEY).unwrap();
     let eth_provider = match talk_to_vitalik::VitalikProvider::new(
         eth_api_url.clone(),
         eth_api_timeout.try_into().unwrap(),
@@ -61,7 +76,7 @@ async fn main() {
     };
 
     // initialize database provider
-    let sled_file_path = config.get_string(ETH_API_ADDR).unwrap();
+    let sled_file_path = config.get_string(ETH_API_ADDR_KEY).unwrap();
     let db_provider = match deal_tracker_db::ProofScheduleDb::new(sled_file_path.clone()) {
         Ok(provider) => Arc::new(provider),
         Err(e) => {
@@ -90,7 +105,7 @@ async fn main() {
         }
     });
 
-    let wake_up_interval = config.get_int(WAKE_UP_INTERVAL).unwrap();
+    let wake_up_interval = config.get_int(WAKE_UP_INTERVAL_KEY).unwrap();
     let mut interval = time::interval(Duration::from_secs(wake_up_interval as u64));
 
     loop {
