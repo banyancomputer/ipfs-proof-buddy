@@ -16,7 +16,7 @@ async fn submit_deal(
     let deal_ids = deal_ids.into_inner();
 
     // get the lock on the vitalikprovider
-    match estuary_call_handler(deal_ids, state.0.as_ref(), state.1.as_ref()).await {
+    match estuary_call_handler(deal_ids, state.0.clone(), state.1.clone()).await {
         Ok(accepted_deal_ids) => Ok(Json(accepted_deal_ids)),
         Err(e) => {
             warn!("there was an error handling the estuary call: {:?}", e);

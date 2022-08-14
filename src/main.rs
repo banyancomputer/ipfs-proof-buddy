@@ -100,7 +100,9 @@ async fn main() {
         // database wakeup
         tokio::spawn(async move {
             // TODO what do we do if it dies...? handle better.
-            db_provider.wake_up(eth_provider).await.unwrap();
+            deal_tracker_db::wake_up(db_provider, eth_provider)
+                .await
+                .unwrap();
         });
     }
 }

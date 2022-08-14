@@ -4,8 +4,9 @@ use crate::{deal_tracker_db, proof_utils, talk_to_ipfs};
 use anyhow::{anyhow, Result};
 use cid::Cid;
 use log::info;
-use rocket::futures::future::join_all;
 use std::io::Read;
+use std::sync::Arc;
+use tokio_stream::StreamExt;
 
 async fn make_a_decision_on_acceptance(
     new_deal_info: &OnChainDealInfo,
@@ -35,16 +36,17 @@ pub async fn build_and_store_obao<T: Read>(
 }
 
 /// this needs better error handling!!!
+/// TODO returning the same dealID passed in is janky and you need to sleep & eat :|
 pub async fn handle_incoming_deal(
     deal_id: DealID,
-    eth_provider: &VitalikProvider,
-    db_provider: &deal_tracker_db::ProofScheduleDb,
-) -> Result<(), ProofBuddyError> {
+    eth_provider: Arc<VitalikProvider>,
+    db_provider: Arc<deal_tracker_db::ProofScheduleDb>,
+) -> Result<DealID, ProofBuddyError> {
     let deal_info = eth_provider
         .get_onchain(deal_id)
         .await
         .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    if !make_a_decision_on_acceptance(&deal_info, eth_provider)
+    if !make_a_decision_on_acceptance(&deal_info, eth_provider.as_ref())
         .await
         .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?
     {
@@ -72,37 +74,38 @@ pub async fn handle_incoming_deal(
         .add_a_deal_to_db(onchain, obao_cid)
         .await
         .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    Ok(())
+    Ok(deal_id)
 }
 
 // it should download files to IPFS as needed
 // it should accept deals and submit them to chain as needed
 /// Note: this does not error, it just logs at level warn if it can't do all the things that it needs to when attempting to ingest a deal
 /// TODO: make sure all the log levels make sense and that none of these errors are actually things that ought to be fatal
+/// TODO: this error handling is like laughably bad please claudia fix this
 pub async fn estuary_call_handler(
     deal_ids: Vec<DealID>,
-    eth_provider: &VitalikProvider,
-    db_provider: &deal_tracker_db::ProofScheduleDb,
+    eth_provider: Arc<VitalikProvider>,
+    db_provider: Arc<deal_tracker_db::ProofScheduleDb>,
 ) -> Result<Vec<DealID>, ProofBuddyError> {
     // spins off a thread for each deal_id
-    join_all(deal_ids.into_iter().map(|deal_id| async move {
-        match handle_incoming_deal(deal_id, eth_provider, db_provider).await {
-            Ok(_) => Some(Ok(deal_id)),
-            Err(ProofBuddyError::FatalPanic(e)) => {
-                panic!("fatal error handling deal {:?}: {}", deal_id, e);
+    let mut stream = tokio_stream::iter(deal_ids.iter().map(|deal_id| {
+        let eth_provider = eth_provider.clone();
+        let db_provider = db_provider.clone();
+        let deal_id = *deal_id;
+        tokio::spawn(async move { handle_incoming_deal(deal_id, eth_provider, db_provider).await })
+    }));
+    let mut results = Vec::new();
+    while let Some(v) = stream.next().await {
+        match v.await {
+            Err(e) => {
+                panic!("something is wrong with the runtime! {:?}", e)
             }
-            Err(ProofBuddyError::InformWebserver(e)) => {
-                warn!("error handling deal {:?}: {}", deal_id, e);
-                Some(Err(ProofBuddyError::InformWebserver(e)))
+            Ok(Err(e)) => {
+                warn!("something is wrong with the database or something! {:?}", e);
+                return Err(e);
             }
-            Err(ProofBuddyError::NonFatal(e)) => {
-                info!("informational error handling deal {:?}: {}", deal_id, e);
-                None
-            }
+            Ok(Ok(deal_id)) => results.push(deal_id),
         }
-    }))
-    .await
-    .iter()
-    .filter_map(|x| x.clone())
-    .collect()
+    }
+    Ok(results)
 }

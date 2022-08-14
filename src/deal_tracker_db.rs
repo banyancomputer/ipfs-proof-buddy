@@ -10,6 +10,7 @@ use crate::{talk_to_ipfs, window_utils};
 use anyhow::{anyhow, Result};
 use cid::Cid;
 use tokio::sync::RwLock;
+use tokio_stream::StreamExt;
 use typed_sled::TransactionalTree;
 
 // TODO: ensure this is safe if it falls over in the middle of a transaction. you've done half a job...
@@ -108,109 +109,134 @@ impl ProofScheduleDb {
         // TODO should we add a wakeup right now? idk probably not... unless its like TIME RIGHT NOW TO DO THE THING AIEEEE LAST MINUTE
     }
 
-    // TODO: add hella timeouts to DB tasks
-    // TODO: holy shit clean this up please
-    // TODO: what happens if we've like totally screwed up a deal beyond belief, no chance of recovery? handle that case.
-    pub(crate) async fn wake_up(&self, eth_provider: Arc<VitalikProvider>) -> Result<()> {
+    // TODO this error ought to be a bit more descriptive ideally
+    async fn handle_deal_id(
+        &self,
+        eth_provider: Arc<VitalikProvider>,
+        deal_id: DealID,
+        wakeup_block: BlockNum,
+    ) -> Result<()> {
         let current_block_n = eth_provider.get_latest_block_num().await?;
+        let mut deal_params = self
+            .deal_tree
+            .read()
+            .await
+            .get(&deal_id)?
+            .ok_or_else(|| anyhow!("no deal params found for deal id {:?}", deal_id))?;
 
-        let blocks_and_deals = {
-            let locked_tree = self.schedule_tree.read().await;
-            locked_tree
-                .range(..current_block_n)
-                .map(|item| item.map_err(|e| anyhow!("{:?}", e)))
-                .collect::<Result<Vec<(BlockNum, HashSet<DealID>)>>>()
-        }?;
+        // TODO handle cancellation situation
+        // TODO handle deal finalization situation
+        // figure out the start of the window we're currently in for this deal
+        match window_utils::get_the_right_window(&deal_params.onchain, current_block_n) {
+            // case 1: we get the right window, we're in it, time to prove that window.
+            Ok(proof_window_start) => {
+                // get the block hash of the window start block
+                let block_hash = eth_provider
+                    .get_block_hash_from_num(proof_window_start)
+                    .await?;
+                let proof_to_post = gen_proof(
+                    proof_window_start,
+                    block_hash,
+                    talk_to_ipfs::get_handle_for_cid(deal_params.onchain.ipfs_file_cid).await?,
+                    talk_to_ipfs::get_handle_for_cid(deal_params.obao_cid).await?,
+                    deal_params.onchain.file_size,
+                )
+                .await?;
+                // TODO posting proof to chain may take a while, should probably wait until we're sure the transaction succeeded to update the database.
+                // TODO implement retries somewhere.
+                let submission_blocknum = eth_provider.post_proof(&deal_id, proof_to_post).await?;
+                deal_params.last_submission = submission_blocknum;
 
-        // this iterates over everything scheduled before the current block number.
-        for block_and_deals in blocks_and_deals.iter() {
-            let (wakeup_block, deal_ids) = block_and_deals;
-
-            // TODO implement multithreading on this... lot of silly waiting on ethereyummy
-            for deal_id in deal_ids.iter() {
-                let mut deal_params = self
-                    .deal_tree
-                    .read()
-                    .await
-                    .get(deal_id)?
-                    .ok_or_else(|| anyhow!("no deal params found for deal id {:?}", deal_id))?;
-
-                // TODO handle cancellation situation
-                // TODO handle deal finalization situation
-                // figure out the start of the window we're currently in for this deal
-                match window_utils::get_the_right_window(&deal_params.onchain, current_block_n) {
-                    // case 1: we get the right window, we're in it, time to prove that window.
-                    Ok(proof_window_start) => {
-                        // get the block hash of the window start block
-                        let block_hash = eth_provider
-                            .get_block_hash_from_num(proof_window_start)
-                            .await?;
-                        let proof_to_post = gen_proof(
-                            proof_window_start,
-                            block_hash,
-                            talk_to_ipfs::get_handle_for_cid(deal_params.onchain.ipfs_file_cid)
-                                .await?,
-                            talk_to_ipfs::get_handle_for_cid(deal_params.obao_cid).await?,
-                            deal_params.onchain.file_size,
-                        )
-                        .await?;
-                        // TODO posting proof to chain may take a while, should probably wait until we're sure the transaction succeeded to update the database.
-                        // TODO implement retries somewhere.
-                        let submission_blocknum =
-                            eth_provider.post_proof(deal_id, proof_to_post).await?;
-                        deal_params.last_submission = submission_blocknum;
-
-                        // was this our last proof? byeee if so... else figure out the next proof window.
-                        let new_block_num = if window_utils::completed_last_proof(&deal_params) {
-                            deal_params.status = CompleteAwaitingFinalization;
-                            None
-                        } else {
-                            Some(window_utils::get_the_next_window(&deal_params))
-                        };
-                        self.unschedule_and_reschedule_atomic(
-                            *deal_id,
-                            Some(*wakeup_block),
-                            new_block_num,
-                            Some(deal_params),
-                        )
-                        .await?;
+                // was this our last proof? byeee if so... else figure out the next proof window.
+                let new_block_num = if window_utils::completed_last_proof(&deal_params) {
+                    deal_params.status = CompleteAwaitingFinalization;
+                    None
+                } else {
+                    Some(window_utils::get_the_next_window(&deal_params))
+                };
+                self.unschedule_and_reschedule_atomic(
+                    deal_id,
+                    Some(wakeup_block),
+                    new_block_num,
+                    Some(deal_params),
+                )
+                .await?;
+            }
+            Err(DealStatusError::Future) => {
+                info!("deal {:?} is scheduled for the future (this shouldn't happen?? something's wrong... the wakeup window was {:?}: {:?}", deal_id,  wakeup_block, deal_params);
+                // this should be the case otherwise invariants are wrong!!
+                assert_eq!(deal_params.status, DealStatus::Future);
+                // reschedule the deal into the future... this shouldn't ever happen, so log it.
+                self.unschedule_and_reschedule_atomic(
+                    deal_id,
+                    Some(wakeup_block),
+                    Some(deal_params.onchain.deal_start_block),
+                    Some(deal_params),
+                )
+                .await?;
+            }
+            Err(DealStatusError::Past) => {
+                match deal_params.status {
+                    DealStatus::Future | DealStatus::Active => {
+                        deal_params.status = CompleteAwaitingFinalization
                     }
-                    Err(DealStatusError::Future) => {
-                        info!("deal {:?} is scheduled for the future (this shouldn't happen?? something's wrong... the wakeup window was {:?}: {:?}", deal_id,  wakeup_block, deal_params);
-                        // this should be the case otherwise invariants are wrong!!
-                        assert_eq!(deal_params.status, DealStatus::Future);
-                        // reschedule the deal into the future... this shouldn't ever happen, so log it.
-                        self.unschedule_and_reschedule_atomic(
-                            *deal_id,
-                            Some(*wakeup_block),
-                            Some(deal_params.onchain.deal_start_block),
-                            Some(deal_params),
-                        )
-                        .await?;
-                    }
-                    Err(DealStatusError::Past) => {
-                        match deal_params.status {
-                            DealStatus::Future | DealStatus::Active => {
-                                deal_params.status = CompleteAwaitingFinalization
-                            }
-                            CompleteAwaitingFinalization
-                            | DealStatus::Cancelled
-                            | DealStatus::Done => {
-                                warn!("deal {:?} was still in the scheduler with a status where it shouldn't have been. your assumed invariants are wrong. info: {:?}", deal_id, deal_params);
-                            }
-                        }
-                        // remove the deal from the scheduling database
-                        self.unschedule_and_reschedule_atomic(
-                            *deal_id,
-                            Some(*wakeup_block),
-                            None,
-                            Some(deal_params),
-                        )
-                        .await?;
+                    CompleteAwaitingFinalization | DealStatus::Cancelled | DealStatus::Done => {
+                        warn!("deal {:?} was still in the scheduler with a status where it shouldn't have been. your assumed invariants are wrong. info: {:?}", deal_id, deal_params);
                     }
                 }
+                // remove the deal from the scheduling database
+                self.unschedule_and_reschedule_atomic(
+                    deal_id,
+                    Some(wakeup_block),
+                    None,
+                    Some(deal_params),
+                )
+                .await?;
             }
-        }
+        };
         Ok(())
     }
+}
+
+// TODO: add hella timeouts to DB tasks
+// TODO: holy shit clean this up please
+pub(crate) async fn wake_up(
+    db_provider: Arc<ProofScheduleDb>,
+    eth_provider: Arc<VitalikProvider>,
+) -> Result<()> {
+    let current_block_n = eth_provider.get_latest_block_num().await?;
+
+    let blocks_and_deals = {
+        let locked_tree = db_provider.schedule_tree.read().await;
+        locked_tree
+            .range(..current_block_n)
+            .map(|item| item.map_err(|e| anyhow!("{:?}", e)))
+            .collect::<Result<Vec<(BlockNum, HashSet<DealID>)>>>()
+    }?;
+
+    // this iterates over everything scheduled before the current block number.
+    for block_and_deals in blocks_and_deals.iter() {
+        let (wakeup_block, deal_ids) = block_and_deals;
+        let eth_provider = eth_provider.clone();
+
+        let mut stream = tokio_stream::iter(deal_ids.iter().map(|deal_id| {
+            let eth_provider = eth_provider.clone();
+            let db_provider = db_provider.clone();
+            let (deal_id, wakeup_block) = (*deal_id, *wakeup_block);
+            tokio::spawn(async move {
+                db_provider
+                    .handle_deal_id(eth_provider, deal_id, wakeup_block)
+                    .await
+            })
+        }));
+        while let Some(v) = stream.next().await {
+            // TODO improve error handling
+            match v.await {
+                Err(e) => error!("something is wrong with the runtime! {:?}", e),
+                Ok(Err(e)) => warn!("something is wrong with the database or something! {:?}", e),
+                Ok(Ok(())) => {}
+            }
+        }
+    }
+    Ok(())
 }
