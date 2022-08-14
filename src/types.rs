@@ -3,7 +3,7 @@ use ethers::prelude::Address;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sled::IVec;
-use std::ops::Add;
+use std::ops::{Add, Mul, Sub};
 
 pub fn serialize_cid<S: Serializer>(cid: &Cid, s: S) -> Result<S::Ok, S::Error> {
     let cid_bytes = cid.to_bytes();
@@ -61,6 +61,20 @@ impl Add for BlockNum {
     }
 }
 
+impl Sub for BlockNum {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        BlockNum(self.0 - other.0)
+    }
+}
+
+impl Mul<u64> for BlockNum {
+    type Output = Self;
+    fn mul(self, other: u64) -> Self {
+        BlockNum(self.0 * other)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct TokenAmount(pub u64);
 
@@ -83,16 +97,25 @@ pub struct OnChainDealInfo {
         serialize_with = "serialize_hash",
         deserialize_with = "deserialize_hash"
     )]
-    pub blake3_file_checksum: bao::Hash,
+    pub blake3_checksum: bao::Hash,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct DealParams {
-    pub on_chain_deal_info: OnChainDealInfo,
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DealStatus {
+    Future,
+    Active,
+    CompleteAwaitingFinalization,
+    Cancelled,
+    Done,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LocalDealInfo {
+    pub onchain: OnChainDealInfo,
     #[serde(serialize_with = "serialize_cid", deserialize_with = "deserialize_cid")]
     pub obao_cid: Cid,
-    pub next_proof_window_start_block_num: BlockNum,
-    pub last_proof_submission_block_num: BlockNum,
+    pub last_submission: BlockNum,
+    pub status: DealStatus,
 }
 
 pub struct Proof {

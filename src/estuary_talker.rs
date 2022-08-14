@@ -1,5 +1,5 @@
 use crate::talk_to_vitalik::VitalikProvider;
-use crate::types::{BlockNum, DealID, DealParams, OnChainDealInfo};
+use crate::types::{BlockNum, DealID, DealStatus, LocalDealInfo, OnChainDealInfo};
 use crate::{deal_tracker_db, proof_utils, talk_to_ipfs};
 use anyhow::{anyhow, Result};
 use cid::Cid;
@@ -43,21 +43,25 @@ pub async fn estuary_call_handler(
 ) -> Result<Vec<DealID>> {
     let mut accepted_deal_ids = Vec::new();
     for deal_id in deal_ids.iter() {
-        let deal_info = eth_provider.get_on_chain_deal_info(*deal_id).await?;
+        let deal_info = eth_provider.get_onchain(*deal_id).await?;
         if !make_a_decision_on_acceptance(&deal_info, eth_provider).await? {
             info!("skipping deal: {:?}", &deal_info);
             continue;
         }
         talk_to_ipfs::download_file_from_ipfs(deal_info.ipfs_file_cid, deal_info.file_size).await?;
         let file_handle = talk_to_ipfs::get_handle_for_cid(deal_info.ipfs_file_cid).await?;
-        let obao_cid = build_and_store_obao(file_handle, deal_info.blake3_file_checksum).await?;
-        let on_chain_deal_info = eth_provider.accept_deal_on_chain().await?;
-        db_provider.add_a_deal_to_db(DealParams {
-                on_chain_deal_info,
-                obao_cid,
-                next_proof_window_start_block_num: on_chain_deal_info.deal_start_block,
-                last_proof_submission_block_num: BlockNum(0),
-            })
+        let obao_cid = build_and_store_obao(file_handle, deal_info.blake3_checksum).await?;
+        let onchain = eth_provider.accept_deal_on_chain().await?;
+        db_provider
+            .add_a_deal_to_db(
+                LocalDealInfo {
+                    onchain,
+                    obao_cid,
+                    last_submission: BlockNum(0),
+                    status: DealStatus::Future,
+                },
+                onchain.deal_start_block,
+            )
             .await?;
         accepted_deal_ids.push(*deal_id);
     }

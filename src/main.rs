@@ -9,6 +9,7 @@ mod talk_to_ipfs;
 mod talk_to_vitalik;
 mod types;
 mod webserver;
+mod window_utils;
 
 use config::{Config, File, FileFormat};
 use log::{error, info};
@@ -43,7 +44,6 @@ async fn main() {
         .build()
         .unwrap();
 
-
     // initialize ethereum api provider
     let eth_api_url = config.get_string(ETH_API_ADDR).unwrap();
     let eth_api_timeout = config.get_int(ETH_API_TIMEOUT).unwrap();
@@ -77,7 +77,9 @@ async fn main() {
     let db_provider_for_webserver = Arc::clone(&db_provider);
     tokio::spawn(async move {
         // TODO make sure error handling is done right
-        match webserver::launch_webserver(eth_provider_for_webserver, db_provider_for_webserver).await {
+        match webserver::launch_webserver(eth_provider_for_webserver, db_provider_for_webserver)
+            .await
+        {
             Ok(_) => info!("webserver finished and terminated ok"),
             Err(e) => {
                 error!("failed to start webserver to receive estuary deals: {}", e);

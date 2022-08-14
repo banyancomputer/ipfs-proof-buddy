@@ -1,10 +1,10 @@
+use crate::deal_tracker_db::ProofScheduleDb;
 use crate::estuary_talker::estuary_call_handler;
 use crate::talk_to_vitalik::VitalikProvider;
 use crate::types::DealID;
 use anyhow::Result;
 use rocket::{http::Status, response::status::Custom, serde::json::Json, Ignite, Rocket, State};
 use std::sync::Arc;
-use crate::deal_tracker_db::ProofScheduleDb;
 
 struct WebserverState(Arc<VitalikProvider>, Arc<ProofScheduleDb>);
 
@@ -20,12 +20,20 @@ async fn submit_deal(
         Ok(accepted_deal_ids) => Ok(Json(accepted_deal_ids)),
         Err(e) => {
             warn!("there was an error handling the estuary call: {}", e);
-            Err(Custom(Status::InternalServerError, "internal server error :) sowwy... check the logs if you're running this :3".parse().unwrap()))
-        },
+            Err(Custom(
+                Status::InternalServerError,
+                "internal server error :) sowwy... check the logs if you're running this :3"
+                    .parse()
+                    .unwrap(),
+            ))
+        }
     }
 }
 
-pub async fn launch_webserver(eth_provider: Arc<VitalikProvider>, db_provider: Arc<ProofScheduleDb>) -> Result<Rocket<Ignite>> {
+pub async fn launch_webserver(
+    eth_provider: Arc<VitalikProvider>,
+    db_provider: Arc<ProofScheduleDb>,
+) -> Result<Rocket<Ignite>> {
     Ok(rocket::build()
         .mount("/submit_deal", routes![submit_deal])
         .manage(WebserverState(eth_provider, db_provider))

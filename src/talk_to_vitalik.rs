@@ -10,6 +10,8 @@ pub struct VitalikProvider {
     timeout: Duration,
 }
 
+// TODO: handle the situation of how sometimes under congestion it takes TEN MINUTES TO SUBMIT A TRANSACTION!!! wtf
+
 // TODO: one day you ought to clean up the fact that you're wrapping everything in a timeout separately. there has to be a better way...
 impl VitalikProvider {
     pub fn new(url: String, timeout_seconds: u64) -> Result<Self> {
@@ -33,11 +35,14 @@ impl VitalikProvider {
         block.hash.ok_or_else(|| anyhow!("block hash not found"))
     }
 
-    pub async fn get_on_chain_deal_info(&self, _deal_id: DealID) -> Result<OnChainDealInfo> {
+    pub async fn get_onchain(&self, _deal_id: DealID) -> Result<OnChainDealInfo> {
         unimplemented!("write me ;)")
     }
 
-    pub async fn post_proof(&self, _deal_id: &DealID, _proof: Proof) -> Result<()> {
+    // TODO: i should somehow handle if this proof has already been posted
+    // the validator should be able to handle if proofs get sent twice on accident
+    // return the block number that the proof made it into.
+    pub async fn post_proof(&self, _deal_id: &DealID, _proof: Proof) -> Result<BlockNum> {
         unimplemented!("write me :)")
     }
 
