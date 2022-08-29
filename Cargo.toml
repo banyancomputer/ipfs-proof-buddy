@@ -1,5 +1,5 @@
 [package]
-name = "ipfs-proof-buddy"
+name = "ipfs_proof_buddy"
 version = "0.1.0"
 edition = "2021"
 
