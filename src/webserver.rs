@@ -1,12 +1,12 @@
 use crate::deal_tracker_db::ProofScheduleDb;
 use crate::estuary_talker::estuary_call_handler;
-use crate::talk_to_vitalik::VitalikProvider;
-use crate::types::DealID;
 use anyhow::Result;
+use banyan_shared::eth;
+use banyan_shared::types::*;
 use rocket::{http::Status, response::status::Custom, serde::json::Json, Ignite, Rocket, State};
 use std::sync::Arc;
 
-struct WebserverState(Arc<VitalikProvider>, Arc<ProofScheduleDb>);
+struct WebserverState(Arc<eth::VitalikProvider>, Arc<ProofScheduleDb>);
 
 #[put("/submit_deal", data = "<deal_ids>")]
 async fn submit_deal(
@@ -31,7 +31,7 @@ async fn submit_deal(
 }
 
 pub async fn launch_webserver(
-    eth_provider: Arc<VitalikProvider>,
+    eth_provider: Arc<eth::VitalikProvider>,
     db_provider: Arc<ProofScheduleDb>,
 ) -> Result<Rocket<Ignite>> {
     Ok(rocket::build()

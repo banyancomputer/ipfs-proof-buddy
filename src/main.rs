@@ -4,12 +4,7 @@ extern crate rocket;
 
 mod deal_tracker_db;
 mod estuary_talker;
-mod proof_utils;
-mod talk_to_ipfs;
-mod talk_to_vitalik;
-mod types;
 mod webserver;
-mod window_utils;
 
 use config::{Config, File, FileFormat};
 use lazy_static::lazy_static;
@@ -17,6 +12,8 @@ use log::{error, info};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::time::{self, Duration};
+
+use banyan_shared::eth;
 
 // TODO: don't hardcode this... set it up with clap.
 const CONFIG_DIR: &str = "~/.ipfs_proof_buddy";
@@ -64,16 +61,14 @@ async fn main() {
     // initialize ethereum api provider
     let eth_api_url = config.get_string(ETH_API_ADDR_KEY).unwrap();
     let eth_api_timeout = config.get_int(ETH_API_TIMEOUT_KEY).unwrap();
-    let eth_provider = match talk_to_vitalik::VitalikProvider::new(
-        eth_api_url.clone(),
-        eth_api_timeout.try_into().unwrap(),
-    ) {
-        Ok(provider) => Arc::new(provider),
-        Err(e) => {
-            error!("failed to create ethereum provider: {:?}", e);
-            return;
-        }
-    };
+    let eth_provider =
+        match eth::VitalikProvider::new(eth_api_url.clone(), eth_api_timeout.try_into().unwrap()) {
+            Ok(provider) => Arc::new(provider),
+            Err(e) => {
+                error!("failed to create ethereum provider: {:?}", e);
+                return;
+            }
+        };
 
     // initialize database provider
     let sled_file_path = config.get_string(ETH_API_ADDR_KEY).unwrap();

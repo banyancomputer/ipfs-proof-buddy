@@ -1,7 +1,8 @@
-use crate::talk_to_vitalik::VitalikProvider;
-use crate::types::{DealID, OnChainDealInfo, ProofBuddyError};
-use crate::{deal_tracker_db, proof_utils, talk_to_ipfs};
+use crate::deal_tracker_db;
 use anyhow::{anyhow, Result};
+use banyan_shared::types::DealID;
+use banyan_shared::types::*;
+use banyan_shared::{eth, ipfs, proofs};
 use cid::Cid;
 use log::info;
 use std::io::Read;
@@ -10,7 +11,7 @@ use tokio_stream::StreamExt;
 
 async fn make_a_decision_on_acceptance(
     new_deal_info: &OnChainDealInfo,
-    eth_provider: &VitalikProvider,
+    eth_provider: &eth::VitalikProvider,
 ) -> Result<bool> {
     if new_deal_info.deal_start_block + new_deal_info.deal_length_in_blocks
         > eth_provider.get_latest_block_num().await?
@@ -28,18 +29,18 @@ pub async fn build_and_store_obao<T: Read>(
     local_file_handle: T,
     blake3_hash: bao::Hash,
 ) -> Result<Cid> {
-    let (obao_digest, obao_file) = proof_utils::gen_obao(local_file_handle).await?;
+    let (obao_digest, obao_file) = proofs::gen_obao(local_file_handle).await?;
     if obao_digest != blake3_hash {
         return Err(anyhow::anyhow!("obao does not match blake3 hash"));
     };
-    talk_to_ipfs::write_file_to_ipfs(obao_file).await
+    ipfs::write_file_to_ipfs(obao_file).await
 }
 
 /// this needs better error handling!!!
 /// TODO returning the same dealID passed in is janky and you need to sleep & eat :|
 pub async fn handle_incoming_deal(
     deal_id: DealID,
-    eth_provider: Arc<VitalikProvider>,
+    eth_provider: Arc<eth::VitalikProvider>,
     db_provider: Arc<deal_tracker_db::ProofScheduleDb>,
 ) -> Result<DealID, ProofBuddyError> {
     let deal_info = eth_provider
@@ -57,10 +58,10 @@ pub async fn handle_incoming_deal(
         )));
     }
     // this one is an external error- can continue if it screws up
-    talk_to_ipfs::download_file_from_ipfs(deal_info.ipfs_file_cid, deal_info.file_size)
+    ipfs::download_file_from_ipfs(deal_info.ipfs_file_cid, deal_info.file_size)
         .await
         .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    let file_handle = talk_to_ipfs::get_handle_for_cid(deal_info.ipfs_file_cid)
+    let file_handle = ipfs::get_handle_for_cid(deal_info.ipfs_file_cid)
         .await
         .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
     let obao_cid = build_and_store_obao(file_handle, deal_info.blake3_checksum)
@@ -84,7 +85,7 @@ pub async fn handle_incoming_deal(
 /// TODO: this error handling is like laughably bad please claudia fix this
 pub async fn estuary_call_handler(
     deal_ids: Vec<DealID>,
-    eth_provider: Arc<VitalikProvider>,
+    eth_provider: Arc<eth::VitalikProvider>,
     db_provider: Arc<deal_tracker_db::ProofScheduleDb>,
 ) -> Result<Vec<DealID>, ProofBuddyError> {
     // spins off a thread for each deal_id

@@ -1,13 +1,8 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 // DataBase? more like DaBaby! https://www.youtube.com/watch?v=mxFstYSbBmc
-use crate::proof_utils::gen_proof;
-use crate::talk_to_vitalik::VitalikProvider;
-use crate::types::DealStatus::CompleteAwaitingFinalization;
-use crate::types::*;
-use crate::window_utils::DealStatusError;
-use crate::{talk_to_ipfs, window_utils};
 use anyhow::{anyhow, Result};
+use banyan_shared::{eth::VitalikProvider, ipfs, proofs::gen_proof, proofs::window, types::*};
 use cid::Cid;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
@@ -37,6 +32,7 @@ impl ProofScheduleDb {
     }
 
     // TODO not sure this is entirely atomic lol?? it's not on the database...
+    // TODO make getters and setters for these hashset members
     // the deal_params never get removed from the database. perhaps we should implement it later.
     async fn unschedule_and_reschedule_atomic(
         &self,
@@ -61,7 +57,7 @@ impl ProofScheduleDb {
                 }
             };
             // insert the deal into the schedule tree at new_block_num
-            if let Some(new_block_num) = new_block_num {
+            if let Some(new_block_num) = new_block_num{
                 if let Some(deal_id_set) = db.get(&new_block_num)? {
                     let _ = db.insert(&new_block_num, &{
                         let mut deal_id_set = deal_id_set;
@@ -85,6 +81,7 @@ impl ProofScheduleDb {
         Ok(())
     }
 
+    // TODO handle finality time!!!
     /// relate the on-chain ID to the LocalDealInfo struct.
     /// BEFORE YOU CALL THIS!: have accepted the deal on chain, have received and validated the file, and have generated and stored the obao.
     /// this schedules the deal for the deal_start_block and sets the status to future. on the next DB wakeup, it'll get scheduled correctly
@@ -97,7 +94,7 @@ impl ProofScheduleDb {
             onchain: deal_params,
             obao_cid,
             last_submission: BlockNum(0),
-            status: DealStatus::Future,
+            deal_todo: LocalDealStatus::Active,
         };
         self.unschedule_and_reschedule_atomic(
             deal_params.deal_id,
@@ -127,7 +124,7 @@ impl ProofScheduleDb {
         // TODO handle cancellation situation
         // TODO handle deal finalization situation
         // figure out the start of the window we're currently in for this deal
-        match window_utils::get_the_right_window(&deal_params.onchain, current_block_n) {
+        match window::get_the_current_window(&deal_params.onchain, current_block_n) {
             // case 1: we get the right window, we're in it, time to prove that window.
             Ok(proof_window_start) => {
                 // get the block hash of the window start block
@@ -137,8 +134,8 @@ impl ProofScheduleDb {
                 let proof_to_post = gen_proof(
                     proof_window_start,
                     block_hash,
-                    talk_to_ipfs::get_handle_for_cid(deal_params.onchain.ipfs_file_cid).await?,
-                    talk_to_ipfs::get_handle_for_cid(deal_params.obao_cid).await?,
+                    ipfs::get_handle_for_cid(deal_params.onchain.ipfs_file_cid).await?,
+                    ipfs::get_handle_for_cid(deal_params.obao_cid).await?,
                     deal_params.onchain.file_size,
                 )
                 .await?;
@@ -148,12 +145,12 @@ impl ProofScheduleDb {
                 deal_params.last_submission = submission_blocknum;
 
                 // was this our last proof? byeee if so... else figure out the next proof window.
-                let new_block_num = if window_utils::completed_last_proof(&deal_params) {
-                    deal_params.status = CompleteAwaitingFinalization;
-                    None
-                } else {
-                    Some(window_utils::get_the_next_window(&deal_params))
+                let new_block_num = window::get_the_next_window(&deal_params);
+                if new_block_num == None {
+                    deal_params.deal_todo = LocalDealStatus::WaitingToFinalize;
+                    // TODO schedule calling finalization?
                 };
+
                 self.unschedule_and_reschedule_atomic(
                     deal_id,
                     Some(wakeup_block),
@@ -162,10 +159,11 @@ impl ProofScheduleDb {
                 )
                 .await?;
             }
-            Err(DealStatusError::Future) => {
+            Err(window::DealStatusError::Future) => {
+                // TODO this is totally wrong
                 info!("deal {:?} is scheduled for the future (this shouldn't happen?? something's wrong... the wakeup window was {:?}: {:?}", deal_id,  wakeup_block, deal_params);
                 // this should be the case otherwise invariants are wrong!!
-                assert_eq!(deal_params.status, DealStatus::Future);
+                assert_eq!(deal_params.deal_todo, LocalDealStatus::Active);
                 // reschedule the deal into the future... this shouldn't ever happen, so log it.
                 self.unschedule_and_reschedule_atomic(
                     deal_id,
@@ -175,14 +173,16 @@ impl ProofScheduleDb {
                 )
                 .await?;
             }
-            Err(DealStatusError::Past) => {
-                match deal_params.status {
-                    DealStatus::Future | DealStatus::Active => {
-                        deal_params.status = CompleteAwaitingFinalization
+            Err(window::DealStatusError::Past) => {
+                // TODO this is totally wrong
+                match deal_params.deal_todo {
+                    LocalDealStatus::Active => {
+                        deal_params.deal_todo = LocalDealStatus::WaitingToFinalize
                     }
-                    CompleteAwaitingFinalization | DealStatus::Cancelled | DealStatus::Done => {
+                    LocalDealStatus::WaitingToFinalize | LocalDealStatus::Cancelled => {
                         warn!("deal {:?} was still in the scheduler with a status where it shouldn't have been. your assumed invariants are wrong. info: {:?}", deal_id, deal_params);
                     }
+                    _ => unimplemented!("trainwreck codebase"),
                 }
                 // remove the deal from the scheduling database
                 self.unschedule_and_reschedule_atomic(
