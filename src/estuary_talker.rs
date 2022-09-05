@@ -29,11 +29,11 @@ pub async fn build_and_store_obao<T: Read>(
     local_file_handle: T,
     blake3_hash: bao::Hash,
 ) -> Result<Cid> {
-    let (obao_digest, obao_file) = proofs::gen_obao(local_file_handle).await?;
+    let (obao_bytes, obao_digest) = proofs::gen_obao(local_file_handle)?;
     if obao_digest != blake3_hash {
         return Err(anyhow::anyhow!("obao does not match blake3 hash"));
     };
-    ipfs::write_file_to_ipfs(obao_file).await
+    ipfs::write_bytes_to_ipfs(obao_bytes).await
 }
 
 /// this needs better error handling!!!
