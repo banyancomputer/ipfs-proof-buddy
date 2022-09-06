@@ -9,8 +9,8 @@ env:
   RUSTFLAGS: "-C link-dead-code"
 
 jobs:
-  call_setup:
-    uses: ./.github/workflows/setup.yml
+  #call_setup:
+  #  uses: ./.github/workflows/setup.yml
   build_and_test:
     name: Rust project - latest
     runs-on: ubuntu-latest
