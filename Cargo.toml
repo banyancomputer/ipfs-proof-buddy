@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# TODO clean up deps
 bao = "0.12"
 tokio = { version = "1", features = ["full"] }
 ethers = { git = "https://github.com/gakonst/ethers-rs" }

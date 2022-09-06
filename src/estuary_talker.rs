@@ -19,7 +19,6 @@ async fn make_a_decision_on_acceptance(
         return Err(anyhow!("deal ended"));
     }
 
-    // TODO: you will need to check more than this... but this is a start. check on-chain state as you keep going
     unimplemented!("check the rest of the things you need to check for incoming deal parameters!")
 }
 
@@ -36,8 +35,6 @@ pub async fn build_and_store_obao<T: Read>(
     ipfs::write_bytes_to_ipfs(obao_bytes).await
 }
 
-/// TODO: this needs better error handling!!!
-/// TODO: returning the same dealID passed in is janky :|
 pub async fn handle_incoming_deal(
     deal_id: DealID,
     eth_provider: Arc<eth::VitalikProvider>,
@@ -60,8 +57,6 @@ pub async fn handle_incoming_deal(
 // it should download files to IPFS as needed
 // it should accept deals and submit them to chain as needed
 /// Note: this does not error, it just logs at level warn if it can't do all the things that it needs to when attempting to ingest a deal
-/// TODO: make sure all the log levels make sense and that none of these errors are actually things that ought to be fatal
-/// TODO: this error handling is like laughably bad please claudia fix this
 pub async fn estuary_call_handler(
     deal_ids: Vec<DealID>,
     eth_provider: Arc<eth::VitalikProvider>,

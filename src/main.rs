@@ -17,7 +17,6 @@ use tokio::time::{self, Duration};
 
 use banyan_shared::eth;
 
-// TODO: don't hardcode this... set it up with clap.
 const CONFIG_DIR: &str = "~/.ipfs_proof_buddy";
 lazy_static! {
     static ref CONFIG_FILE_PATH: String = format!("{}/config.toml", CONFIG_DIR);
@@ -30,7 +29,6 @@ const ETH_API_TIMEOUT_KEY: &str = "eth_api_timeout";
 const IPFS_API_ADDR_KEY: &str = "ipfs_api_addr";
 const SLED_FILE_PATH_KEY: &str = "sled_file_path";
 
-// TODO one day you need to tear out anyhow, you SINNER
 
 // want to be able to accept a file from estuary, stick it in ipfs, keep it in a database with proof info, submit proofs regularly, and close out of deals.
 #[rocket::main]
@@ -49,7 +47,7 @@ async fn main() {
             ETH_API_ADDR_KEY,
             "https://mainnet.infura.io/v3/YOUR_API_KEY",
         )
-        .expect("set your api key in the config file") // TODO handle unset API key correctly
+        .expect("set your api key in the config file")
         .set_default(ETH_API_TIMEOUT_KEY, 5)
         .unwrap()
         .set_default(IPFS_API_ADDR_KEY, "localhost:5050")
@@ -90,7 +88,6 @@ async fn main() {
     let eth_provider_for_webserver = Arc::clone(&eth_provider);
     let db_provider_for_webserver = Arc::clone(&db_provider);
     tokio::spawn(async move {
-        // TODO make sure error handling is done right
         match webserver::launch_webserver(eth_provider_for_webserver, db_provider_for_webserver)
             .await
         {
@@ -111,7 +108,6 @@ async fn main() {
         let db_provider = db_provider.clone();
         // database wakeup
         tokio::spawn(async move {
-            // TODO what do we do if it dies...? handle better.
             deal_tracker_db::wake_up(db_provider, eth_provider)
                 .await
                 .unwrap();

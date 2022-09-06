@@ -19,7 +19,6 @@ pub struct ProofScheduleDb {
     /// on_chain deal id --mapped_to--> LocalDealInfo
     deal_tree: RwLock<typed_sled::Tree<DealID, LocalDealInfo>>,
     /// window --mapped_to--> on_chain deal id vec
-    // TODO are hashsets the right answer here? idk
     schedule_tree: RwLock<typed_sled::Tree<BlockNum, HashSet<DealID>>>,
 }
 
@@ -74,8 +73,6 @@ impl ProofScheduleDb {
         db.apply_batch(&batch)
     }
 
-    // TODO not sure this is entirely atomic lol?? it's not fully on the database... this is because of typedtransactiontree things
-    // TODO the deal_params never get removed from the database. perhaps we should implement it later.
     async fn unschedule_and_reschedule_atomic(
         &self,
         deal_id: DealID,
@@ -164,7 +161,7 @@ impl ProofScheduleDb {
                 self.unschedule_and_reschedule_atomic(
                     deal_id,
                     Some(wakeup_block),
-                    new_block_num, // see if chainlink responded in 5 minutes! TODO actually write 5 minutes correctly
+                    new_block_num, // see if chainlink responded in 5 minutes!
                     Some(new_deal_info),
                 )
                 .await
@@ -173,9 +170,6 @@ impl ProofScheduleDb {
                 unimplemented!();
             }
             DealTodo::WithdrawEarnings => {
-                // TODO check to make sure it's worth the gas
-                // TODO if it is, withdraw your earnings to your local wallet of choice
-                // TODO if it's not, do nothing
                 unimplemented!();
             }
         }
@@ -212,7 +206,6 @@ pub(crate) async fn wake_up(
             })
         }));
         while let Some(v) = stream.next().await {
-            // TODO improve error handling
             match v.await {
                 Err(e) => error!("something is wrong with the runtime! {:?}", e),
                 Ok(Err(e)) => warn!("something is wrong with the database or something! {:?}", e),
