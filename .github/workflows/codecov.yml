@@ -20,7 +20,6 @@ jobs:
           #- stable
           #- beta
           - nightly
-    needs: call_setup
     steps:
       - uses: actions/checkout@v3
       - uses: actions/cache@v3
