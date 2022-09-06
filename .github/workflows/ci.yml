@@ -29,6 +29,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Install package
         run: |
+          sudo apt-get update
           sudo apt-get -y install libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev libiberty-dev
 #      - uses: codecov/codecov-action@v3
 #        with:
