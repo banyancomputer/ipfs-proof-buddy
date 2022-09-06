@@ -2,6 +2,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate rocket;
 
+mod database_types;
+mod deal_tasks;
 mod deal_tracker_db;
 mod estuary_talker;
 mod webserver;
@@ -47,7 +49,7 @@ async fn main() {
             ETH_API_ADDR_KEY,
             "https://mainnet.infura.io/v3/YOUR_API_KEY",
         )
-        .expect("set your api key in the config file") // TODO handle this correctly lol
+        .expect("set your api key in the config file") // TODO handle unset API key correctly
         .set_default(ETH_API_TIMEOUT_KEY, 5)
         .unwrap()
         .set_default(IPFS_API_ADDR_KEY, "localhost:5050")

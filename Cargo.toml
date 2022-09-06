@@ -25,4 +25,7 @@ tempfile = "3.3"
 futures = "0.3"
 futures-util = "0.3"
 tokio-stream = "0.1"
-banyan-shared = { git = "https://github.com/banyancomputer/banyan-shared-rs" }
+#banyan-shared = { git = "https://github.com/banyancomputer/banyan-shared-rs" }
+
+[dependencies.banyan-shared]
+path = "../banyan-shared"

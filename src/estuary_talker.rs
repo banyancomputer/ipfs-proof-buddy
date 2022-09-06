@@ -36,45 +36,24 @@ pub async fn build_and_store_obao<T: Read>(
     ipfs::write_bytes_to_ipfs(obao_bytes).await
 }
 
-/// this needs better error handling!!!
-/// TODO returning the same dealID passed in is janky and you need to sleep & eat :|
+/// TODO: this needs better error handling!!!
+/// TODO: returning the same dealID passed in is janky :|
 pub async fn handle_incoming_deal(
     deal_id: DealID,
     eth_provider: Arc<eth::VitalikProvider>,
     db_provider: Arc<deal_tracker_db::ProofScheduleDb>,
-) -> Result<DealID, ProofBuddyError> {
-    let deal_info = eth_provider
-        .get_onchain(deal_id)
-        .await
-        .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    if !make_a_decision_on_acceptance(&deal_info, eth_provider.as_ref())
-        .await
-        .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?
-    {
+) -> Result<DealID> {
+    let deal_info = eth_provider.get_onchain(deal_id).await?;
+    if !make_a_decision_on_acceptance(&deal_info, eth_provider.as_ref()).await? {
         info!("skipping deal: {:?}", &deal_info);
-        return Err(ProofBuddyError::NonFatal(format!(
-            "chose not to accept deal {:?}",
-            deal_id
-        )));
+        return Err(anyhow!("chose not to accept deal {:?}", deal_id));
     }
     // this one is an external error- can continue if it screws up
-    ipfs::download_file_from_ipfs(deal_info.ipfs_file_cid, deal_info.file_size)
-        .await
-        .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    let file_handle = ipfs::get_handle_for_cid(deal_info.ipfs_file_cid)
-        .await
-        .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    let obao_cid = build_and_store_obao(file_handle, deal_info.blake3_checksum)
-        .await
-        .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    let onchain = eth_provider
-        .accept_deal_on_chain()
-        .await
-        .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
-    db_provider
-        .add_a_deal_to_db(onchain, obao_cid)
-        .await
-        .map_err(|e| ProofBuddyError::InformWebserver(e.to_string()))?;
+    ipfs::download_file_from_ipfs(deal_info.ipfs_file_cid, deal_info.file_size).await?;
+    let file_handle = ipfs::get_handle_for_cid(deal_info.ipfs_file_cid).await?;
+    let obao_cid = build_and_store_obao(file_handle, deal_info.blake3_checksum).await?;
+    let onchain = eth_provider.accept_deal_on_chain().await?;
+    db_provider.add_a_deal_to_db(onchain, obao_cid).await?;
     Ok(deal_id)
 }
 
@@ -87,7 +66,7 @@ pub async fn estuary_call_handler(
     deal_ids: Vec<DealID>,
     eth_provider: Arc<eth::VitalikProvider>,
     db_provider: Arc<deal_tracker_db::ProofScheduleDb>,
-) -> Result<Vec<DealID>, ProofBuddyError> {
+) -> Result<Vec<DealID>> {
     // spins off a thread for each deal_id
     let mut stream = tokio_stream::iter(deal_ids.iter().map(|deal_id| {
         let eth_provider = eth_provider.clone();
