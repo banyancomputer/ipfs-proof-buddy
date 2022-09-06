@@ -20,6 +20,7 @@ jobs:
           #- stable
           #- beta
           - nightly
+    needs: call_setup
     steps:
       - name: Install package
         run: |
