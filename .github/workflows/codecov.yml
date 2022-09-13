@@ -13,3 +13,9 @@ jobs:
     uses: banyancomputer/.github/.github/workflows/rust-codecov.yml@master
     with:
       name_of_stuff_to_test_in_target: 'ipfs_proof_buddy'
+  run_linters:
+    uses: banyancomputer/.github/.github/workflows/rust_linters_formatters.yml@master
+  run_tests:
+    uses: banyancomputer/.github/.github/workflows/rust_test.yml@master
+  run_todo:
+    uses: banyancomputer/.github/.github/workflows/todo.yml@master
