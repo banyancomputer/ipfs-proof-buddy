@@ -1,7 +1,6 @@
 name: CI checks and codecov
 
 on:
-  pull_request:
   push:
 
 env:
