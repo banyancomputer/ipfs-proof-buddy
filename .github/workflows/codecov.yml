@@ -10,6 +10,6 @@ env:
 
 jobs:
   call_codecov_workflow:
-    uses: banyancomputer/.github/workflow-templates/codecov.yml@master
+    uses: banyancomputer/.github/workflow-templates/rust-codecov.yml@master
     with:
       name_of_stuff_to_test_in_target: 'ipfs_proof_buddy'
