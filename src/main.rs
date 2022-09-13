@@ -62,15 +62,14 @@ async fn main() {
 
     // initialize ethereum api provider
     let eth_api_url = config.get_string(ETH_API_ADDR_KEY).unwrap();
-    let eth_api_timeout = config.get_int(ETH_API_TIMEOUT_KEY).unwrap();
-    let eth_provider =
-        match eth::VitalikProvider::new(eth_api_url.clone(), eth_api_timeout.try_into().unwrap()) {
-            Ok(provider) => Arc::new(provider),
-            Err(e) => {
-                error!("failed to create ethereum provider: {:?}", e);
-                return;
-            }
-        };
+    let eth_provider = match eth::VitalikProvider::new(eth_api_url.clone(), "aaaaaaaaa".to_string())
+    {
+        Ok(provider) => Arc::new(provider),
+        Err(e) => {
+            error!("failed to create ethereum provider: {:?}", e);
+            return;
+        }
+    };
 
     // initialize database provider
     let sled_file_path = config.get_string(ETH_API_ADDR_KEY).unwrap();
