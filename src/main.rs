@@ -1,3 +1,6 @@
+#![deny(unused_crate_dependencies)]
+#![deny(unused_unsafe)]
+
 extern crate lazy_static;
 #[macro_use]
 extern crate rocket;

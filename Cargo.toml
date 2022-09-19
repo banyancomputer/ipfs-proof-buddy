@@ -9,21 +9,15 @@ edition = "2021"
 # TODO clean up deps
 bao = "0.12"
 tokio = { version = "1", features = ["full"] }
-ethers = { git = "https://github.com/gakonst/ethers-rs" }
 anyhow = "1.0"
 cid = "0.8"
 sled = "0.34"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1.0"
 lazy_static = "1.4"
 typed-sled = "0.2"
 rocket = {version = "0.5.0-rc.2", features = ["json"]}
 config = "0.13"
 log = "0.4"
-ipfs-api = "0.16.0"
-tempfile = "3.3"
-futures = "0.3"
-futures-util = "0.3"
 tokio-stream = "0.1"
 banyan-shared = { git = "https://github.com/banyancomputer/banyan-shared-rs" }
 
